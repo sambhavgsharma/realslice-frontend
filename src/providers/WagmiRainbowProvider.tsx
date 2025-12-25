@@ -1,11 +1,8 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect, ReactNode } from "react";
 import { getDefaultWallets, RainbowKitProvider } from "@rainbow-me/rainbowkit";
-import "@rainbow-me/rainbowkit/styles.css";
-import { WagmiConfig, configureChains } from "wagmi";
-import { createConfig, http } from "@wagmi/core";
+import { WagmiProvider, createConfig, http } from "wagmi";
 import { mainnet, goerli } from "wagmi/chains";
-// import { publicProvider } from "wagmi/providers/public";
 
 const projectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ??
@@ -17,32 +14,54 @@ if (!projectId && process.env.NODE_ENV !== "production") {
   );
 }
 
-// configure chains and public client (wagmi v2)
-const chains = [mainnet, goerli] as const;
+// Create wagmi config
+const createWagmiConfig = () => {
+  const chains = [mainnet, goerli] as const;
 
-const { connectors } = getDefaultWallets({
-  appName: "RealSlice",
-  chains,
-  projectId,
-});
+  const { connectors } = getDefaultWallets({
+    appName: "RealSlice",
+    projectId,
+  });
 
-export const wagmiConfig = createConfig({
-  chains,
-  transports: {
-    [mainnet.id]: http(),
-    [goerli.id]: http(),
-  },
-  connectors: connectors,
-});
+  return createConfig({
+    chains,
+    connectors,
+    transports: {
+      [mainnet.id]: http(),
+      [goerli.id]: http(),
+    },
+  });
+};
+
+let config: ReturnType<typeof createConfig> | null = null;
 
 export default function WagmiRainbowProvider({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
+  const [mounted, setMounted] = useState(false);
+  const [wagmiConfig, setWagmiConfig] = useState<ReturnType<typeof createConfig> | null>(null);
+
+  useEffect(() => {
+    // Initialize config on client-side only
+    if (!config) {
+      config = createWagmiConfig();
+    }
+    setWagmiConfig(config);
+    setMounted(true);
+  }, []);
+
+  // Show nothing until client-side hydration is complete
+  if (!mounted || !wagmiConfig) {
+    return <>{children}</>;
+  }
+
   return (
-    <WagmiConfig config={wagmiConfig}>
-      <RainbowKitProvider chains={chains}>{children}</RainbowKitProvider>
-    </WagmiConfig>
+    <WagmiProvider config={wagmiConfig}>
+      <RainbowKitProvider>
+        {children}
+      </RainbowKitProvider>
+    </WagmiProvider>
   );
 }
